@@ -242,6 +242,9 @@ return(mu_predic)
 }
 
 
+
+
+
 #-----Log-Likelihood function with data fixed
 
 log_vero<-function(x){
@@ -327,8 +330,8 @@ proc.time()-time
 
 #-----------------------Simulation with predictions
 
-T<-10
-n<-200
+T_r<-10+1/3
+n_r<-310
 
 s_1<-sqrt(3)
 b_1<-12
@@ -344,22 +347,31 @@ mu_ini_2<-10
 vel_ini_2<-0
 
 
-t<-seq(0,T,length=(n+1))
-D<-t[2]-t[1]
+
+K_1_r<-cov_OUH_zeta_2(T_r,n_r,b_1,h_1)
+K_2_r<-cov_OUH_zeta_2(T_r,n_r,b_2,h_2)
+mu_1_c<-simulation(s_1,b_1,D,K_1_r,mu_ini_1)
+mu_2_c<-simulation(s_2,b_2,D,K_2_r,mu_ini_2)
+
+T<-10
+n<-300
+mu_1<-mu_1_c[1:(n+1)]
+mu_2<-mu_2_c[1:(n+1)]
 
 
-K_1<-cov_OUH_zeta_2(T,n,b_1,h_1)
-K_2<-cov_OUH_zeta_2(T,n,b_2,h_2)
-mu_1<-simulation(s_1,b_1,D,K_1,mu_ini_1)
-mu_2<-simulation(s_2,b_2,D,K_2,mu_ini_2)
 
 
+
+write.csv(matrix(c(mu_1_c,mu_2_c),n_r+1,2),"sim_data.csv")
+
+
+#telemetry_data<-data.frame(read.csv("Bat53D.csv"))
 
 
 
 #---Trajectory
 m<-60
-plot(mu_1,mu_2, type="l",xlab="longitude",ylab="latitude",lwd=2,
+plot(mu_1_c,mu_2_c, type="l",xlab="longitude",ylab="latitude",lwd=2,
 main="Simulation Path h=(0.03,0.92)")
 max_1<-max(mu_1)
 max_2<-max(mu_2)
@@ -372,13 +384,14 @@ for(i in 1:m){
    lines(c(min_1,max_1),c(reg_2[i],reg_2[i]),col="green",type="l")
 }
 points(mu_1[1],mu_2[1],col="red",pch=19)
-points(mu_1[n],mu_2[n],col="blue",pch=19)
+points(mu_1[n+1],mu_2[n+1],col="blue",pch=19)
 
 
-D
-b_1
 
-T
+t<-seq(0,T,length=(n+1))
+D<-t[2]-t[1]
+
+
 
 R<-1/D
 T_2<-R*T
@@ -424,7 +437,9 @@ mu<-mu_1
 maximos_lon<-opm(c(4,0.25),fn=log_vero, lower=c(0.05,0.05), upper=c(15,0.95),method="L-BFGS-B")
  max_lon[2]<-maximos_lon$p1
  max_lon[3]<-maximos_lon$p2
- 
+
+
+
 
 K_1<-cov_OUH_zeta_2(T_2,n,max_lon[2],max_lon[3])
 S_B<-matrix(rep(0,n*n),n,n)
@@ -433,8 +448,13 @@ for(i in 1:n){
      S_B[i,j]<-exp((j-i)*max_lon[2]*D)
   } 
 }
-M<-(S_B%*%K_2%*%t(S_B))
+M<-(S_B%*%K_1%*%t(S_B))
 max_lon[1]<-sqrt((t(as.vector(mu[2:(n+1)]-mu[1]))%*%solve(M)%*%as.vector(mu[2:(n+1)]-mu[1]) )[1,1]/n)
+
+
+
+
+
 
 
 #----Escale D=1
@@ -465,6 +485,11 @@ max_lon[1]
 
 
 
+
+
+
+
+
 mu<-mu_2
 #------------Change to lon data---------------
 log_vero<-function(x){
@@ -486,7 +511,7 @@ for(i in 1:n){
      S_B[i,j]<-exp((j-i)*max_lat[2]*D)
   } 
 }
-M<-(S_B%*%K_2%*%t(S_B))
+M<-(S_B%*%K_1%*%t(S_B))
 max_lat[1]<-sqrt((t(as.vector(mu[2:(n+1)]-mu[1]))%*%solve(M)%*%as.vector(mu[2:(n+1)]-mu[1]) )[1,1]/n)
 
 #---Scale D=1
@@ -530,11 +555,13 @@ max_lat[2]<-max_lat[2]/D
 #-----------Predictions--------------
 
 
-sim<-100
+sim<-3000
 step<-10
 
 predic_lon<-prediction(T,max_lon[1],max_lon[2],max_lon[3],mu_1,sim,step)
 predic_lat<-prediction(T,max_lat[1],max_lat[2],max_lat[3],mu_2,sim,step)
+
+
 
 
 medias_pred_lon<-c(0,step)
@@ -547,27 +574,107 @@ for(i in 1:step) {
 }
 
 
-max_1<-max(mu_1)+abs(max(predic_lon)-mu_1[n])
-max_2<-max(mu_2)+abs(max(predic_lat)-mu_2[n])
-min_1<-min(mu_1)-abs(min(predic_lon)-mu_1[n])
-min_2<-min(mu_2)-abs(min(predic_lat)-mu_2[n])
-plot(mu_1,mu_2,type="l",col="black",xlab="longitude",ylab="latitude",main="Path Prediction",xlim=c(min_1,max_1),ylim=c(min_2,max_2),lwd=2)
-for(i in 1:sim){
- lines(c(mu_1[n],predic_lon[i,]),c(mu_2[n],predic_lat[i,]),type="l",col="red")
+max_1<-max(mu_1)+abs(max(predic_lon)-mu_1[n+1])
+max_2<-max(mu_2)+abs(max(predic_lat)-mu_2[n+1])
+min_1<-min(mu_1)-abs(min(predic_lon)-mu_1[n+1])
+min_2<-min(mu_2)-abs(min(predic_lat)-mu_2[n+1])
+plot(mu_1,mu_2,type="l",col="black",xlab="longitude",ylab="latitude",main="Trajectory Prediction",xlim=c(min_1,max_1),ylim=c(min_2,max_2),lwd=2)
+for(i in 1:m){
+   lines(c(reg_1[i],reg_1[i]),c(min_2,max_2),col="gray",type="l")
+   lines(c(min_1,max_1),c(reg_2[i],reg_2[i]),col="gray",type="l")
 }
+#for(i in 1:sim){
+ #lines(c(mu_1[n+1],predic_lon[i,]),c(mu_2[n+1],predic_lat[i,]),type="l",col="red")
+#}
 
-lines(c(mu_1[n],medias_pred_lon),c(mu_2[n],medias_pred_lat),type="l",col="yellow",lwd=2)
 reg_1<-seq(min_1,max_1,length=m)
 reg_2<-seq(min_2,max_2,length=m)
-for(i in 1:m){
-   lines(c(reg_1[i],reg_1[i]),c(min_2,max_2),col="green",type="l")
-   lines(c(min_1,max_1),c(reg_2[i],reg_2[i]),col="green",type="l")
-}                        
+                        
 points(mu_1[1],mu_2[1],col="red",pch=19)
-points(mu_1[n],mu_2[n],col="blue",pch=19)
+points(mu_1[n+1],mu_2[n+1],col="blue",pch=19)
+
+
+
+Int_1_l<-rep(0,step)
+Int_1_r<-rep(0,step)
+Int_2_l<-rep(0,step)
+Int_2_r<-rep(0,step)
+
+
+
+
+
+conf<-0.95
+
+for(i in 1:step){
+Int_1_l[i]<-as.numeric(quantile(predic_lon[,i],(1-conf)/2))
+Int_1_r[i]<-as.numeric(quantile(predic_lon[,i],1-(1-conf)/2))
+Int_2_l[i]<-as.numeric(quantile(predic_lat[,i],(1-conf)/2))
+Int_2_r[i]<-as.numeric(quantile(predic_lat[,i],1-(1-conf)/2))
+lines(c(Int_1_l[i],Int_1_r[i]),c(Int_2_l[i],Int_2_r[i]),col="cyan",lwd=1)
+
+}
+
+lines(c(mu_1[n+1],Int_1_l),c(mu_2[n+1],Int_2_l),col="brown",lwd=2)
+
+lines(c(mu_1[n+1],Int_1_r),c(mu_2[n+1],Int_2_r),col="brown",lwd=2)
+
+
+lines(c(mu_1[n+1],medias_pred_lon),c(mu_2[n+1],medias_pred_lat),type="l",col="yellow",lwd=2)
+
+lines(mu_1_c[(n+1):(n_r+1)],mu_2_c[(n+1):(n_r+1)],col="orange",lwd=2)
+
+
+
+legend("bottomright", legend=c("Initial Position","Final Position","Trajectory","Trajectory Predicted Mean","Trajectory to Predict","95% Confidence Region", "95% Confidence Bands"),
+       col=c("Red","blue","black","Yellow","orange","cyan","Brown"),pch = c(19,19,NA,NA,NA, NA, NA), lty = c(NA,NA,1, 1, 1,1,1),cex=0.8)
+
+
+norm<-function(x,y){
+	n<-length(x)
+	aux<-0
+	for(i in 1:n){
+		aux<-aux+(x[i]-y[i])^2
+	}
+return(sqrt(aux))
+}
+
+
+
+e_cuad<-rep(0,step)
+for(i in 1:step){
+	e_cuad[i]<-norm(c(medias_pred_lon[i],medias_pred_lat[i]),c(mu_1_c[n+1+i],mu_2_c[n+1+i]))^2
+}
+
+
+mean(e_cuad)
+
+
+
+
+e_cuad<-rep(0,step)
+for(i in 1:step){
+	e_cuad[i]<-norm(c(medias_pred_lon[i]),c(mu_1_c[n+1+i]))^2
+}
+
+mean(e_cuad)
+
+
+
+e_cuad<-rep(0,step)
+for(i in 1:step){
+	e_cuad[i]<-norm(c(medias_pred_lat[i]),c(mu_2_c[n+1+i]))^2
+}
+
+
+mean(e_cuad)
+
+
 
 
 #------------------------End simulation case---------------#
+
+
 
 
 
